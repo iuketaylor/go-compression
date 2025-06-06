@@ -23,22 +23,6 @@ type CompressionResult struct {
 	Saving         float64
 }
 
-func openFile(filename string) (*os.File, error) {
-	file, err := os.Open(filename)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to open file '%s': %w", filename, err)
-	}
-	return file, nil
-}
-
-func readFileContents(file *os.File) ([]byte, error) {
-	contents, err := io.ReadAll(file)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to read file': %w", err)
-	}
-	return contents, nil
-}
-
 func percentageDelta(b1, b2 []byte) float64 {
 	len1 := float64(len(b1))
 	len2 := float64(len(b2))
@@ -54,24 +38,8 @@ func minifyJson(data []byte) ([]byte, error) {
 	return minifiedJson.Bytes(), nil
 }
 
-func main() {
-	if len(os.Args) < 2 {
-		log.Fatal("You need to provide a file to compress")
-		os.Exit(1)
-	}
-
-	file, err := openFile(os.Args[1])
-	if err != nil {
-		log.Fatal("Error opening file", err)
-		os.Exit(1)
-	}
-	defer file.Close()
-
-	originalBytes, err := readFileContents(file)
-	if err != nil {
-		log.Fatal("Error reading file contents", err)
-		os.Exit(1)
-	}
+func runCompressions(originalBytes, minifiedBytes []byte) []CompressionResult {
+	results := []CompressionResult{}
 
 	compressors := []Compressor{
 		{"Luke", LukeCompression},
@@ -81,12 +49,6 @@ func main() {
 		{"LZW", LzwCompression},
 	}
 
-	minifiedBytes, err := minifyJson(originalBytes)
-	if err != nil {
-		log.Fatal("Failed to minify json", err)
-	}
-
-	results := []CompressionResult{}
 	for _, compressor := range compressors {
 		compressedBytes, err := compressor.Func(minifiedBytes)
 		if err != nil {
@@ -105,8 +67,10 @@ func main() {
 		return results[i].Saving > results[j].Saving
 	})
 
-	fmt.Printf("Original Size: %d bytes\n", len(originalBytes))
+	return results
+}
 
+func outputResults(results []CompressionResult) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', tabwriter.AlignRight)
 	defer w.Flush()
 
@@ -123,4 +87,31 @@ func main() {
 			result.Saving,
 		)
 	}
+}
+
+func main() {
+	if len(os.Args) < 2 {
+		log.Fatal("You need to provide a file to compress")
+		os.Exit(1)
+	}
+
+	filename := os.Args[1]
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatal("Error opening file", err)
+	}
+	defer file.Close()
+
+	originalBytes, err := io.ReadAll(file)
+	if err != nil {
+		log.Fatal("Error reading file contents", err)
+	}
+
+	minifiedBytes, err := minifyJson(originalBytes)
+	if err != nil {
+		log.Fatal("Failed to minify json", err)
+	}
+
+	results := runCompressions(originalBytes, minifiedBytes)
+	outputResults(results)
 }
